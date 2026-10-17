@@ -14,15 +14,10 @@
 #include<fstream>
 
 
-//#include <windows.h>
-//#include <psapi.h>
-
 using namespace std;
 
 
-//I used this video by William Fiset for help with the Algorithm
-//And I found it very useful to understand how it works!
-//https://youtu.be/8MpoO2zA2l4?si=YY6ryUyZVQJ45GRo
+
 
 //this uses concepts such as bubbles and tips to remove the errors!
 //Remove all tips and for each bubble only keep the path of the highest weight
@@ -78,20 +73,24 @@ struct STRING_REF_HASHER{
 };
 
 
-struct NODE_DATA{
-    NODE_DATA(int i= -1,uint16_t c = 0):id(i),count(c){}
-    int id;
-    uint16_t count;
-};
-
 
 class K_MER_BIT_MAP{
     public:
-        K_MER_BIT_MAP(uint16_t k_size):k_mer_len(k_size){}
+        K_MER_BIT_MAP(
+            vector<string>&reads,
+            vector<uint16_t>&dist,
+            bool is_pair
+        ){
+            process_reads(reads,dist,is_pair);
+        }
+
         K_MER_BIT_MAP() = default;
 
         typedef pair<uint64_t,uint64_t> K_MER_128;
+
+        //Used to signal if a node or kmer is not found in the array
         static constexpr size_t NOT_FOUND = static_cast<size_t>(-1);
+
         struct pair_data{
             pair_data(uint32_t i,uint16_t d):target_index(i),dist(d){}
             uint32_t target_index;
@@ -99,18 +98,7 @@ class K_MER_BIT_MAP{
         };
         unordered_map<int,vector<pair_data>> pair_map;
 
-        void process_reads(vector<string>&reads,vector<uint16_t>&dist,bool is_pair){
-            k_mer_len = low_k_mer;
-            clean_reads(reads,dist,is_pair);
-            reset();
-            k_mer_len = big_k_mer;
-            create_bit_arr(reads,dist,is_pair,false);
-            
-        }
 
-        int16_t get_min_freq(){
-            return min_freq;
-        }
 
         size_t size()const{
             return arr.size();
@@ -144,11 +132,9 @@ class K_MER_BIT_MAP{
             return arr[i];
         }
 
-        void sort_k_mer(vector<K_MER_128>&a){
-            sort(a.begin(),a.end());
-        }
 
-        size_t find(const K_MER_128& k_mer){
+
+        size_t find(const K_MER_128& k_mer)const{
             auto it = lower_bound(arr.begin(),arr.end(),k_mer);
             if(it != arr.end() && *it == k_mer){
                 return (distance(arr.begin(),it));
@@ -160,35 +146,14 @@ class K_MER_BIT_MAP{
 
         size_t find(const STRING_REF&ref)const{
             K_MER_128 bit = encode_str_to_bit(ref);
-            auto it = lower_bound(arr.begin(),arr.end(),bit);
-            if(it != arr.end() && *it == bit){
-                return (distance(arr.begin(),it));
-            }
-            else{
-                return NOT_FOUND;
-            }
+            return find(bit);
         }
 
         size_t end()const{
             return NOT_FOUND;
         }
 
-        uint16_t count_at(size_t i){
-            if(i>=arr.size()){
-                throw std::out_of_range("Bit index out of range");
-            }
-            return count_arr[i];
-        }
 
-        uint16_t count_of_k_mer(const STRING_REF&ref){
-            size_t i = find(ref);
-            if(i != NOT_FOUND){
-                return count_arr[i];
-            }
-            else{
-                return 0;
-            }
-        }
 
         void print_back_char_at(size_t i,ostream&out)const{
             if(i>=arr.size()){
@@ -244,21 +209,23 @@ class K_MER_BIT_MAP{
                     if(k2_index != NOT_FOUND && k1_index != NOT_FOUND){
                         //cout<<"pair: "<<k1_index<<"->"<<k2_index<<" dist: "<<distances[i/2]<<"\n";
                         //the index at arr acts as the verex id, 
-                        //if the vertex is 5 then its at index 5 in the arr
+                        //i.e if the vertex is 5 then its at index 5 in the arr
                         pair_map[k1_index].push_back({static_cast<uint32_t>(k2_index),distances[i/2]});
                     }
                 }
             }
-            //cout<<"Pair map size: "<<pair_map.size()<<" junctions count: "<< junction_nodes.size()<<"\n";
         }
 
 
 
 
     private:
+
         uint16_t k_mer_len;
+
         //must be in this order because of how I encoded the bit
         string bases = "ACGT";
+
         vector<K_MER_128> arr;
         vector<uint8_t>count_arr;
         int16_t min_freq = 2;
@@ -277,6 +244,42 @@ class K_MER_BIT_MAP{
             gene_vol = 0;
             unique_gene = 0;
         }
+
+
+        uint16_t count_at(size_t i){
+            if(i>=arr.size()){
+                throw std::out_of_range("Bit index out of range");
+            }
+            return count_arr[i];
+        }
+
+        uint16_t count_of_k_mer(const STRING_REF&ref){
+            size_t i = find(ref);
+            if(i != NOT_FOUND){
+                return count_arr[i];
+            }
+            else{
+                return 0;
+            }
+        }
+
+
+        void process_reads(vector<string>&reads,vector<uint16_t>&dist,bool is_pair){
+            k_mer_len = low_k_mer;
+            clean_reads(reads,dist,is_pair);
+            reset();
+            k_mer_len = big_k_mer;
+            create_bit_arr(reads,dist,is_pair,false);
+
+            //create general link map for all the reads with an offset of 10
+            //so not all kmers would be included to save memory
+            unordered_set<int> empty_set;
+            build_pair_link_map(reads,dist,empty_set,20,false);
+
+            //to save memory I can clear the dist
+            //dist.clear(); dist.shrink_to_fit();
+        }
+
 
 
         size_t clean_reads(
@@ -377,7 +380,7 @@ class K_MER_BIT_MAP{
                 }
                 
                 sort_k_mer(chunk);
-                clean_bit_arr(chunk);
+                clean_bit_arr(chunk,cleaning_reads);
 
                 if(prefix == 0 && !cleaning_reads){
                     bool restart_needed = tune_settings();
@@ -389,12 +392,6 @@ class K_MER_BIT_MAP{
                 }
 
                 arr.insert(arr.end(),chunk.begin(),chunk.end());
-            }
-            if(is_pair && !cleaning_reads){
-                unordered_set<int> empty_set;
-                build_pair_link_map(reads,dist,empty_set,10,false);
-                //to save memory I can clear the dist
-                //dist.clear(); dist.shrink_to_fit();
             }
         }
 
@@ -519,13 +516,18 @@ class K_MER_BIT_MAP{
             return id;
         }
 
+        void sort_k_mer(vector<K_MER_128>&a){
+            sort(a.begin(),a.end());
+        }
+
         double coverage_of_k(){
             return ( gene_vol / static_cast<double>(unique_gene) );
         }
 
         bool tune_settings(){
+
             double CK = coverage_of_k();
-            //double target_ck = max(6.0, ( (12.0*k_mer_len) / big_k_mer ) );
+
             double target_ck = k_mer_len > 30 ? 12.0 : 6.0;
             if( CK >= target_ck){
                 if(k_mer_len % 2 == 1){
@@ -556,34 +558,9 @@ class K_MER_BIT_MAP{
             return true;
         }
 
-
-        void estimate_min_freq(const vector<K_MER_128>&a){
-            size_t size = a.size();
-            size_t total_freq = 0;
-            size_t unique_k_mer_count = 0;
-            for(size_t i = 0; i<size; ){
-                size_t j = i+1;
-                while(j<size && a[i] ==  a[j]){
-                    j++;
-                }
-                int freq = j-i;
-                if(freq >= 2){
-                    total_freq += j-i;
-                    unique_k_mer_count++;
-                }
-                i = j;
-            }
-            double average = static_cast<double>(total_freq)/unique_k_mer_count;
-            //cout<<"average = "<<average<<endl;
-            min_freq = max(2.0,average/5.0);
-            //cout<<"MIN_FREQ ESTIMATED TO BE: "<<min_freq<<"\n";
-        }
-        
         
 
-
-        void clean_bit_arr(vector<K_MER_128>&a){
-            //estimate_min_freq(a);
+        void clean_bit_arr(vector<K_MER_128>&a,bool is_cleaning_reads = false){
             
             size_t write_index = 0;
             size_t size = a.size();
@@ -602,7 +579,10 @@ class K_MER_BIT_MAP{
                 if(freq >= min_freq){
                     a[write_index] = a[i];
                     write_index++;
-                    count_arr.push_back(freq);
+                    if(is_cleaning_reads){
+                        count_arr.push_back(freq);
+                    }
+                    
                 }
                 i = j;
             }
@@ -614,100 +594,16 @@ class K_MER_BIT_MAP{
 };
 
 
-struct K_MER_SLOT{
-    K_MER_SLOT():occupied(false){}
-    STRING_REF key;
-    NODE_DATA val;
-    bool occupied;
-};
-class FLAT_K_MER_MAP{
-    public:
-        FLAT_K_MER_MAP(size_t m):max_size(m),bucket(m){}
-        NODE_DATA& operator[](const STRING_REF&ref){
-            return find_or_insert(ref);
-        }
-
-        K_MER_SLOT* find(const STRING_REF&ref){
-            size_t slot_index = hasher(ref) % max_size;
-            size_t start = slot_index;
-            while(bucket[slot_index].occupied){
-                
-                if(bucket[slot_index].key == ref){
-                    return &bucket[slot_index];
-                }
-                (slot_index = slot_index + 1) % max_size;
-                if(slot_index == start){
-                    break;
-                }
-            }
-            return nullptr;
-        }
-
-        void print_mem_size(){
-            cout<<"\nFLAT K_MER MAP SIZE: "<<
-            (
-                (sizeof(vector<K_MER_SLOT>) + (sizeof(K_MER_SLOT) * max_size))
-                / (1024.0 * 1024)
-            ) << " MB\n";
-        }
-
-    private:
-        size_t max_size;
-        vector<K_MER_SLOT>bucket;
-        STRING_REF_HASHER hasher;
-
-        NODE_DATA& find_or_insert(const STRING_REF&ref){
-            size_t slot_index = hasher(ref) % max_size;
-            if(bucket[slot_index].occupied){
-                if(bucket[slot_index].key == ref){
-                    return bucket[slot_index].val;
-                }
-                else{
-                    return find_next_open_or_matching_slot(slot_index,ref);
-                }
-            }
-            else{
-                return create_slot(slot_index,ref);
-            }
-        }
-        NODE_DATA& find_next_open_or_matching_slot(
-            size_t i,const STRING_REF&ref
-        ){
-            int j = (i+1) % max_size;
-           while(bucket[i].occupied){
-                if(j == i){
-                    cout<<"no more space overwriting slot\n";
-                    break;
-                }
-                if(bucket[i].key == ref){
-                    return bucket[i].val;
-                }
-                j = (j+1) % max_size;
-                
-            }
-            return create_slot(j,ref);
-        }
-        NODE_DATA& create_slot(size_t i,const STRING_REF&ref){
-            bucket[i].occupied = true;
-            bucket[i].key = ref;
-            return bucket[i].val;
-        }
-
-        
-
-};
-
 
 struct edge{
-    edge(int t,int w):to(t),weight(w),visits_left(w){}
+    edge(int t,int w):to(t),weight(w),visited(false){}
     edge() = default;
     int to;
     unsigned short weight;
-    unsigned short visits_left;
+    bool visited = false;
     
     void operator++(){
         weight++;
-        visits_left = weight;
     }
 };
 
@@ -750,8 +646,8 @@ void print_unordered_map_mem_size(const unordered_map<K,V,H>&map){
 class DE_BRUIJN_GRAPH{
     public:
 
-        DE_BRUIJN_GRAPH(vector<string>& entries,const int& k,vector<uint16_t>&dist,bool is_pair){
-            create_k_mer_graph(entries,k,dist,is_pair);
+        DE_BRUIJN_GRAPH(vector<string>& entries,vector<uint16_t>&dist,bool is_pair){
+            create_k_mer_graph(entries,dist,is_pair);
             
         }
         DE_BRUIJN_GRAPH() = default;
@@ -767,7 +663,6 @@ class DE_BRUIJN_GRAPH{
             if(v>=graph.size()){throw std::out_of_range("Row index out of range");}
             return graph[v];
         }
-        
         
         
         void update_edge_degree(){
@@ -819,12 +714,22 @@ class DE_BRUIJN_GRAPH{
             }
             return total;
         }
-        
+
+        void clear(){
+            graph.clear();
+            graph.shrink_to_fit();
+        }
+
+
+        //removes Tips and bubbles over and over again until none where removed
         void remove_tips_and_bubbles(int max_depth){
-            
+
             TIP_REMOVER tip_remover(*this,max_depth);
+
             BUBBLE_REMOVER bubble_remover(*this,max_depth);
+
             unsigned int total = 0;
+
             while(true){
                 unsigned int tips = 0;
                 unsigned int bubbles = 0;
@@ -889,66 +794,22 @@ class DE_BRUIJN_GRAPH{
 
     
     private:
-
-        void build_seen_twice_arr(
-            const vector<string>& entries,
-            vector<bool>&seen_twice,
-            const STRING_REF_HASHER& hasher, 
-            const size_t& size, const int& k
-        ){
-            seen_twice.assign(size,false);
-            vector<bool>seen_once(size,false);
-            for(const string& e:entries){
-                if(e.size()<k){continue;}
-                for(int i = 0; i<=e.size()-k+1; i++){
-                    STRING_REF ref(&e,i,k-1);
-                    int pos_index = hasher(ref)%size;
-                    if(!seen_once[pos_index]){
-                        seen_once[pos_index] = true;
-                    }
-                    else{
-                        seen_twice[pos_index] = true;
-                    }
-                    
-                }
-            }
-        }
     
         void create_k_mer_graph(
-            vector<string>& entries,const int& k,
-            vector<uint16_t>&dist,bool is_pair
+            vector<string>& entries,
+            vector<uint16_t>&dist,
+            bool is_pair
         ){
             int count = entries.size();
 
-            STRING_REF_HASHER hasher;
-            //build_seen_twice_arr(entries,seen_twice,hasher,seen_size,k);
-            //size_t map_size = 8000000;
-            //FLAT_K_MER_MAP node_map_data(map_size);
-            id_to_str = K_MER_BIT_MAP(k-1);
+            //create an the kmer map to be used to build the graph
+            id_to_str = K_MER_BIT_MAP(entries,dist,is_pair);
 
-
-            id_to_str.process_reads(entries,dist,is_pair);
             true_k_len = id_to_str.get_k_len();
+
             size_t size = id_to_str.size();
             graph.resize(size);
 
-            
-            //used for initial filtering of rare k-mers because the e-coli genome
-            //will create a lot of errors that would make the graph huge
-            /*for(const string& e:entries){
-                if(e.size()<k){continue;}
-                for(int i = 0; i<=e.size()-k+1; i++){
-                    STRING_REF ref(&e,i,k-1);
-                    size_t hashed_val = hasher(ref);
-                    size_t pos_in_seen = hashed_val%seen_size;
-                    if(seen_twice[pos_in_seen]){
-                        node_map_data.push(ref);
-                    }
-                }
-            }
-            //clear to save memory
-            seen_twice.clear(); seen_twice.shrink_to_fit();
-            */
 
             for(const string& e:entries){
                 if(e.size()<true_k_len){continue;}
@@ -958,22 +819,12 @@ class DE_BRUIJN_GRAPH{
                     //vert size is k-1 so the edge is k long
                     STRING_REF pre(&e,i,true_k_len-1);
                     STRING_REF suff(&e,i+1,true_k_len-1);
-
-                    //filtering rare k-mers to avoid making the graph huge
-                    //size_t pre_i = node_map_data.find(pre);
-                    //size_t suff_i = node_map_data.find(suff);
-                    //if(pre_i == node_map_data.end() || node_map_data.count_at(pre_i)< min_freq){continue;}
-                    //if(suff_i == node_map_data.end() || node_map_data.count_at(suff_i) < min_freq){continue;}
-
                     
                     size_t u = id_to_str.find(pre);
                     size_t v = id_to_str.find(suff);
                     if(u == id_to_str.end()){continue;}
                     if(v == id_to_str.end()){continue;}
 
-                    
-                    //cout<<u<<"->"<<v<<" = "<<pre<<"->"<<suff<<"\n";
-                    //
 
                     //prevent the same edge from being created twice
                     int v_index = find_edge(u,v);
@@ -982,24 +833,12 @@ class DE_BRUIJN_GRAPH{
                         v_index = graph[u].size() - 1;
                     }
                     
-                    //++ increments the weight and the visits left
+                    //++ increments the weight of the edge
                     ++graph[u][v_index];
                 }
             }
         }
-        
-        
-        
-        /*int get_id(K_MER_SLOT* ptr){
-            if(ptr->val.id != -1){
-                return ptr->val.id;
-            }
-            int id = id_to_str.size();
-            //id_to_str.push_back(ptr->key);
-            ptr->val.id = id;
-            add_row();
-            return id;
-        }*/
+
         
         void add_row(const DE_BRUIJN_ROW& row){
             graph.push_back(row);
@@ -1036,6 +875,10 @@ class DE_BRUIJN_GRAPH{
         
         //DE BRUIJN GRAPH's private classes
 
+
+//##############################################################################################################
+//######################################### BUBBLE REMOVER START ###############################################
+//##############################################################################################################   
 
         
         class BUBBLE_REMOVER{
@@ -1204,13 +1047,13 @@ class DE_BRUIJN_GRAPH{
             }
                 
                 
-        };
-            
-            
+        };          
             
             
 
-            
+//##############################################################################################################
+//########################################## TIP REMOVER START #################################################
+//##############################################################################################################   
             
         class TIP_REMOVER{
                 public:
@@ -1299,8 +1142,6 @@ class DE_BRUIJN_GRAPH{
                     int edge_count = path.size()-1;
                     int tips_removed = 0;
                     if(edge_count>0 && (in_deg[tip_end] > 1 || out_deg[tip_end] > 1 || out_deg[tip_end] == 0)){
-                        bool is_forward = true;
-                        if(!tip_is_error(path,is_forward)){return 0;}
                         
                         remove_tip(path);
                         tips_removed+=path.size()-1;
@@ -1314,11 +1155,10 @@ class DE_BRUIJN_GRAPH{
                 }
                 
                 int backward_tip_removal(const int& tip_origin){
+                    int tips_removed = 0;
                     //since the graph changes I need to make sure
                     //that what I had in the queue is still valid
                     //meaning the origin still has out >= 2
-                    int tips_removed = 0;
-                    
                     if(out_deg[tip_origin] < 2){return tips_removed;}
                     
                     //need to look at all the edges that could be tips
@@ -1334,8 +1174,6 @@ class DE_BRUIJN_GRAPH{
                         
                         const int&tip_end = path.back();
                         if(out_deg[tip_end] == 0 && in_deg[tip_end] == 1){
-                            bool is_forward = false;
-                            if(!tip_is_error(path,is_forward)){continue;}
                             
                             remove_tip(path);
                             
@@ -1371,54 +1209,14 @@ class DE_BRUIJN_GRAPH{
                         graph.remove_edge(u,v);
                     }
                 }
-                
-                
-                bool tip_is_error(const vector<int>&tip,bool is_forward = false){
-                    return true;
-                    if(graph.id_to_str.get_min_freq() == 2){return true;}
-                    int origin_indx = is_forward ? tip.size()-1 : 0;
-                    const int& origin = tip[origin_indx];
-                    
-                    float threshold = 0.2;
-                    
-                    //get tip average weight
-                    int tip_total_weight = 0;
-                    for(int i = 0; i<tip.size()-1; i++){
-                        const int& u = tip[i];
-                        const int& v = tip[i+1];
-                        int j = graph.find_edge(u,v);
-                        if(j != -1){
-                            tip_total_weight += graph[u][j].weight;
-                        }
-                    }
-                    float tip_average_weight = static_cast<float>(tip_total_weight) / (tip.size()-1);
-                    
-                    //get weight of main path (max weight of the out edges of the origin)
-                    int main_path_weight = 0;
-                    for(int i = 0; i<graph[origin].size(); i++){
-                        const int& edge_weight = graph[origin][i].weight;
-                        main_path_weight = max(main_path_weight,edge_weight);
-                    }
-                    //the tip is an error if weight is below threshold relative to main
-                    return ( tip_average_weight < main_path_weight * threshold);
-                    
-                }
         };
             
-  
-};
+
+//##############################################################################################################
+//######################################## DE BRUIJN GRAPH CLASS END ###########################################
+//##############################################################################################################  
     
-
-/*
-void print_peak_memory(){
-    PROCESS_MEMORY_COUNTERS info;
-    if(GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info))){
-        double peak_mb = info.PeakWorkingSetSize / (1024.0 * 1024.0);
-        cout << "\n[PEAK MEMORY] " << peak_mb << " MB\n";
-    }
-}
-//*/
-
+};
 
 
 
@@ -1427,17 +1225,10 @@ void print_peak_memory(){
 class GENOME_ASSEMBLER{
     public:
         GENOME_ASSEMBLER(vector<string>&r,vector<uint16_t>&dist,bool is_pair)
-        :reads(r),distances(dist),is_read_pair(is_pair)
-        {
-            //estimate_k_size();
-            graph = DE_BRUIJN_GRAPH(reads,k_mer_size,distances,is_read_pair);
-            
-            /*
-            cout<<"original graph:\n";
-            graph.print_graph();
-            //*/
-            //cout<<"Before tip and bubble removal:\nEdge count: "<<graph.get_total_edges()
-            //<<"\nVert count: "<<graph.size()<<"\n";
+        :reads(r),distances(dist),is_read_pair(is_pair){
+        
+            graph = DE_BRUIJN_GRAPH(reads,distances,is_read_pair);
+
             graph.remove_tips_and_bubbles(graph.true_k_len);
             graph.remove_relative_low_weight_edges();
 
@@ -1455,11 +1246,13 @@ class GENOME_ASSEMBLER{
         
         void assemble_genome(){
             graph.update_edge_degree();
-            ofstream file("genome_assembly/contig_output.txt");
+            const string contig_file_path = "genome_assembly/contig_output.txt";
+            ofstream file(contig_file_path);
             build_contigs();
+            //can clear the debruijn graph to save memory!
+            //graph.clear();
             print_contigs(file);
-            //print_eulerian_path();
-            //cout<<"\nfinished!\nEdge count: "<<graph.get_total_edges()<<"\nVert count: "<<graph.size()<<"\n";
+            cout<<"\nGenome assembled!\ncontigs outputed at "<<contig_file_path<<endl;
             //graph.print_graph_mem_size();
             //graph.id_to_str.print_mem_size();
 
@@ -1467,34 +1260,14 @@ class GENOME_ASSEMBLER{
             
         }
 
-        void print_eulerian_path(){
-            list<int> path = get_eulerian_path();
-            const K_MER_BIT_MAP&id_to_str = graph.id_to_str;
-            if(path.empty() || path.front() != path.back()){
-                cout<<"0";
-                return;
-            }
-            for(auto it = path.begin(); it!=path.end(); it++){
-                //cout<<"it is: "<<*it<<" ";
-                id_to_str.print_back_char_at(*it,cout);
-            }
-
-        }
         
     private:
-        
-        int k_mer_size = 51;
         
         DE_BRUIJN_GRAPH graph;
 
         bool is_read_pair;
         vector<uint16_t>&distances;
         vector<string>&reads;
-
-
-        //TO DO: Convert the contigs to hold the actual strings instead of a whole int for one char...
-        //I think the best way is to record the node to contig while 
-        //building the contig and store the contig as a string
 
 
         struct CONTIG{
@@ -1532,29 +1305,13 @@ class GENOME_ASSEMBLER{
 
         void assign_node_to_contig_index(){
 
-            //cout<<"node to contig building\n";
-
-            int unconnected_count = 0;
-            int connected_count = 0;
             node_to_contig.assign(graph.size(),{});
             for(int i = 0; i<contigs.size(); i++){
                 for(int j = 0; j<contigs[i].nodes.size(); j++){
                     int v = contigs[i].nodes[j];
                     node_to_contig[v].push_back({i,j});
-                    /*if(node_to_contig[v].empty()){
-                        node_to_contig[v].contig_index = i;
-                        node_to_contig[v].depth = j;
-                        connected_count++;
-                    }
-                    else if(node_to_contig[v].contig_index>=0 && node_to_contig[v].contig_index != i){
-                        node_to_contig[v].contig_index = -2;
-                        unconnected_count++;
-                        
-                    }*/
                 }
             }
-            //cout<<"There are "<<unconnected_count<<" contig shared nodes and " <<
-            //connected_count-unconnected_count<<"non shared\n";
         }
 
         void build_contig_link_matrix(){
@@ -1584,13 +1341,8 @@ class GENOME_ASSEMBLER{
                                     int gap = estimated_dist - bases_dist;
 
                                     if(bases_dist < estimated_dist + MAX_VARIANCE){
-                                        //(finished hopefully) TO DO: add an expected distance between the contigs
-                                        //to the matrix so ill have a count for the votes and a dist
-                                        
                                         contig_link_matrix[contig_a_indx][contig_b_indx].weight++;
                                         contig_link_matrix[contig_a_indx][contig_b_indx].total_dist += gap;
-                                        //cout<<"link found! weight is "<<
-                                        //contig_link_matrix[contig_a_indx][contig_b_indx].weight<<" gap is "<<gap<<"\n";
                                     }
                                 }
                             }
@@ -1690,8 +1442,6 @@ class GENOME_ASSEMBLER{
             //cout<<"joined contigs "<< i<<" and "<<j<<"\n";
             joined_contigs[j] = true;
             contigs[i].insert(contigs[j]);
-            //contigs[j].nodes.clear();
-            //contigs[j].nodes.shrink_to_fit();
         }
 
         void join_linked_contigs(){
@@ -1727,45 +1477,12 @@ class GENOME_ASSEMBLER{
 
         }
 
-
-        void estimate_k_size(){
-            size_t gc_count = 0;
-            size_t all_bases = 0;
-            for(const string&e:reads){
-                for(int i = 0; i<e.size(); i++){
-                    if(e[i] == 'C' || e[i] == 'G'){
-                        gc_count++;
-                    }
-                    all_bases++;
-                }
-            }
-            double gc_percent = (static_cast<long double>(gc_count) / all_bases) * 100.0;
-            if(gc_percent < 30.0 || gc_percent > 70.0){
-                k_mer_size = 51;
-            }
-            else{
-                k_mer_size = 21;
-            }
-            //cout<<"KMER SIZE ESTIMATED TO FIT: "<<k_mer_size<<" GC_percent: "<<gc_percent<<"\n";
-        }
-
-
-        
+        //start node that has out > 0 and is not a 1 to 1 node
         void find_start_edge(int& u,int& j){
             for(int v = 0; v<graph.size(); v++){
                 if(graph.out_deg[v] > 0 && !(graph.out_deg[v] == 1 && graph.in_deg[v] == 1)){
-                    /*
-                    cout<<"graph["<<v<<"].size(): "<<graph[v].size()<<"\n";
-                    //*/
                     for(int i = 0; i<graph[v].size(); i++){
-                        /*
-                        cout<<"potential start edge: "<<v<<"->"<<graph[v][i]<<"\n";
-                        //*/
-                        if(graph[v][i].visits_left>0){
-                            /*
-                            cout<<"new start edge: "<<v<<"->"<<graph[v][i]<<"\n";
-                            //*/
-                            
+                        if(!graph[v][i].visited){
                             u = v; j = i;
                             return;
                         }
@@ -1776,188 +1493,31 @@ class GENOME_ASSEMBLER{
 
         int find_active_edge(int v){
             for(int i = 0; i<graph[v].size(); i++){
-                if(graph[v][i].visits_left>0){
+                if(!graph[v][i].visited){
                     return i;
                 }
             }
             return -1;
         }
 
-        struct candidate_data{
-            candidate_data(int i,int d):index(i),depth(d){}
-            int index;
-            int depth;
-        };
-        bool target_is_on_path(
-            int candidate_target,
-            int target_index,int remaining_dist
-        ){
-            const uint8_t MAX_VARIANCE = 25;
-            int min_dist = remaining_dist - MAX_VARIANCE;
-            int max_dist = remaining_dist + MAX_VARIANCE;
-            if(max_dist <1){return false;}
-
-            queue<candidate_data> candidates;
-            unordered_map<int,int>visited_depth;
-            candidates.push({candidate_target,1});
-            while(!candidates.empty()){
-                candidate_data data = candidates.front(); candidates.pop();
-                if(data.depth >= min_dist && data.depth <= max_dist && data.index == target_index){
-                    return true;
-                }
-                if(data.depth < max_dist){
-                    for(int i = 0; i<graph[data.index].size(); i++){
-                        if(graph[data.index][i].visits_left > 0){
-                            int next_vert = graph[data.index][i].to;
-                            int next_depth = data.depth+1;
-                            candidates.push({next_vert, next_depth});
-                            /*auto it = visited_depth.find(next_vert);
-                            if(it == visited_depth.end() || it->second>next_depth){
-                                visited_depth[next_vert] = next_depth;
-                                
-                            }*/
-                        }
-                    }
-                }
-            }
-            return false;
-        }
-
-        int choose_path_from_junction(
-            const vector<int>& contig_path,
-            const K_MER_BIT_MAP&id_to_str
-
-        ){
-            
-            int curr_vert = contig_path.back();
-            int edges_count = graph[curr_vert].size();
-            vector<uint16_t>scores(edges_count,0);
-            int path_size = contig_path.size();
-            int max_look_back = min(10000,path_size);
-            for(int steps_back = 1; steps_back<=max_look_back; steps_back++){
-                int path_index = path_size - steps_back;
-                int path_node = contig_path[path_index];
-                auto it = id_to_str.pair_map.find(path_node);
-                if(it == id_to_str.pair_map.end()){
-                    continue;
-                }
-                
-                for(const auto& data: it->second){
-                    int remaining_dist = data.dist - steps_back;
-                    if(remaining_dist >0){
-                        for(int candidate = 0; candidate<edges_count; candidate++){
-                            if(graph[curr_vert][candidate].visits_left>0){
-                                int candidate_target =  graph[curr_vert][candidate].to;
-                                if(target_is_on_path(candidate_target,data.target_index,remaining_dist)){
-                                    scores[candidate]++;
-                                }
-                            }
-                        }
-                    }
-                }
-                
-            }
-
-            int best_edge = -1;
-            int second_edge = -1;
-            int best_score = 0;
-            int second_best = 0;
-            bool tie = false;
-            for(int i = 0; i<edges_count; i++){
-                if(scores[i] > best_score){
-                    second_edge = best_edge;
-                    second_best = best_score;
-                    best_edge = i;
-                    best_score = scores[i];
-                    tie = false;
-                }
-                else if(scores[i] == best_score && best_score>0){
-                    tie = true;
-                    second_best = best_score;
-                    second_edge = i;
-                    
-                }
-                else if(second_best<scores[i]){
-                        second_best = scores[i];
-                        second_edge = i;
-                    }
-            }
-            double ratio = second_best/static_cast<double>(best_score);
-            int delta =  best_score - second_best;
-            bool passes = false;
-            if(ratio < 0.9){passes = true;}
-            else if(ratio <0.97){
-                passes = true;
-                if(contig_path.size()>2){
-                    int prev_vert = contig_path[contig_path.size()-2];
-                    int index = graph.find_edge(prev_vert,curr_vert);
-                    int weight = graph[prev_vert][index].weight;
-                    int diff_1 = abs(weight - graph[curr_vert][best_edge].weight);
-                    int diff_2 = abs(weight - graph[curr_vert][second_edge].weight);
-                    if(diff_2 < diff_1){
-                        best_edge = second_edge;
-                        best_score = second_best;
-                        //cout<<"CHOSEN THE SECOND FOR BETTER WEIGHT MATCH!\n";
-                    }
-                    //else if(diff_1>diff_2){cout<<"DIDNT CHOOSE THE SECOND!\n";}
-                    else if(diff_1 == diff_2){
-                        //cout<<"TIE!\n"
-                        ;passes = false;
-                    }
-                }
-            }
-            else{
-                passes = false;
-            }
-            if(second_best > 2 && !passes){
-
-                tie = true;
-            }
-            /*
-            cout << "CURRENT JUNCTION AT "<< curr_vert <<
-             " | CHOSEN EDGE INDEX "<<best_edge << " | WITH A SCORE OF "
-             <<best_score<<" | tie is "<<tie <<"\n";
-             //*/
-            if(!tie && best_score>=3){
-                return best_edge;
-            }
-            //if(best_score>0){cout<<"Best: "<<best_score<<" second: "<<second_best<<"\n";}
-            
-            return -1;
-        }
-
-
 
         
         void build_contigs(){
 
             //cout<<"building contigs...\n";
-            
-            size_t contigs_total_length = 0;
-            int all_junctions = 0;
-            int solved_junctions = 0;
+
             //linear contigs starting from a start node that 
             //has out > 0 and !(in == 1 && out == 1)
             const K_MER_BIT_MAP&id_to_str = graph.id_to_str;
-            size_t curr_contig = 1;
             while(true){
                 vector<int> contig_path;
                 int v = -1,u_index = -1;
                 find_start_edge(v,u_index);
                 if(v == -1){break;}
                 const int&u = graph[v][u_index].to;
-                graph[v][u_index].visits_left=0;
+                graph[v][u_index].visited = true;
                 contig_path.push_back(v);
-
                 
-                /*
-                cout<<"starting edge: "<<v<<"->"<<u;
-                //*/
-                //out<<">CONTIG"<<curr_contig<<"\n";
-                curr_contig++;
-                //id_to_str.print_str_at(v,out);
-                //id_to_str.print_back_char_at(u,out);
-                contigs_total_length+=k_mer_size;
                 int curr = u;
 
                 while(!graph[curr].empty()){
@@ -1967,50 +1527,36 @@ class GENOME_ASSEMBLER{
                     contig_path.push_back(curr);
 
                     if(graph.in_deg[curr] == 1 && graph.out_deg[curr] == 1){
-                        if(graph[curr][0].visits_left>0){
+                        if(!graph[curr][0].visited){
                             edge_indx = 0;
                         }
                         else{break;}
                     }
-                    /*else if(is_read_pair){
-                        //cout<<"getting edge...\n";
-                        edge_indx = choose_path_from_junction(contig_path,id_to_str);
-                        if(edge_indx != -1){solved_junctions++;}
-                        all_junctions++;
-                    }*/
+
                     if(edge_indx == -1){break;}
 
                     next = graph[curr][edge_indx].to;
-                    graph[curr][edge_indx].visits_left=0;
+                    graph[curr][edge_indx].visited = true;
                     /*
                     cout<<"->"<<next;
                     //*/
-                    //id_to_str.print_back_char_at(next,out);
-                    contigs_total_length++;
                     curr = next;
                 }
                 if(contig_path.size() > 50){
                         contigs.push_back(CONTIG(contig_path));
                     }
-                //out<<"\n";
             }
             
             //independent cyclic contigs
             for(int v = 0; v<graph.size(); v++){
                 for(int i = 0; i<graph[v].size(); i++){
                     vector<int>contig_path;
-                    if( graph[v][i].visits_left <=0 ){continue;}
+                    if( graph[v][i].visited ){continue;}
                     
-                    graph[v][i].visits_left=0;
+                    graph[v][i].visited = true;
                     contig_path.push_back(v);
                     
                     const int& target = graph[v][i].to;
-                    //out<<">CONTIG"<<curr_contig<<"\n";
-                    curr_contig++;
-                    //id_to_str.print_str_at(v,out);
-                    //id_to_str.print_back_char_at(target,out);
-
-                    contigs_total_length += k_mer_size;
                     
                     int curr = target;
                     
@@ -2019,21 +1565,15 @@ class GENOME_ASSEMBLER{
                         int edge_indx = find_active_edge(curr);
                         if(edge_indx == -1){break;}
                         const int& next = graph[curr][edge_indx].to;
-                        graph[curr][edge_indx].visits_left=0;
-                        //id_to_str.print_back_char_at(next,out);
-
-                        contigs_total_length++;
+                        graph[curr][edge_indx].visited = true;
 
                         curr = next;
                     }
                     if(contig_path.size() > 1){
                         contigs.push_back(CONTIG(contig_path));
                     }
-                    //out<<"\n";
                 }
             }
-            //cout<<"ALL JUNCTIONS: "<<all_junctions<<" | SOLVED JUNCTIONS: "<<solved_junctions<<"\n";
-            //cout<<"THE TOTAL LENGTH OF ALL CONTIGS IS: "<<contigs_total_length<<"\n";
         }
 
 
@@ -2058,104 +1598,11 @@ class GENOME_ASSEMBLER{
             }
         }
 
-
-
-        bool graph_has_eulerian_path(){
-            size_t size = graph.size();
-            size_t start_nodes = 0, end_nodes = 0;
-            for(int i = 0; i<size; i++){
-                //for a path to exist there must be at most
-                // a difference of 1 between the in / out degrees
-                if ( abs(graph.in_deg[i] - graph.out_deg[i]) > 1){
-                    return false;
-                }
-                else if(graph.out_deg[i] - graph.in_deg[i] == 1){
-                    start_nodes++;
-
-                }
-
-                else if(graph.in_deg[i] - graph.out_deg[i] == 1){
-                    end_nodes++;
-                }
-
-            }
-            //either there are no start/end nodes or there are 1 of each
-            bool has_path = (start_nodes == 0 && end_nodes == 0) || (start_nodes == end_nodes == 1);
-            return has_path;
-        }
-
-
-        void dfs(list<int>&path,int curr){
-            while(graph.out_deg.at(curr) > 0){
-                //select the next unvisited edge
-                //the out_deg is used both to know how much
-                //edges I have left to discover 
-                //and also to index the next node 
-                size_t next_node_index = --graph.out_deg.at(curr);
-                size_t next_node = graph[curr][next_node_index].to;
-                dfs(path,next_node);
-            }
-            path.push_front(curr);
-        }
-
-
-        size_t get_start_node(){
-            size_t size = graph.size();
-            size_t start = 0;
-            for(int i = 0; i<size; i++){
-                //if a vert has more out than in by 1
-                //it is a unique starting node
-                if((graph.out_deg[i] - graph.in_deg[i]) == 1){return i;}
-
-                //otherwise just choose some node with an out degree
-                //of at least one
-                if(graph.out_deg[i]>0){
-                    start = i;
-                }
-            }
-            return start;
-        }
-
-
-        list<int> get_eulerian_path(){
-            list<int>path;
-            graph.update_edge_degree();
-            if( !graph_has_eulerian_path() ){
-                cout<<"no path!\n";
-                return path;
-            }
-            size_t start_node = get_start_node();
-
-            dfs(path,start_node);
-
-            size_t edge_count = graph.get_total_edges();
-
-            //if we didnt traverse a correct number of verices
-            //i.e edge_count+1 than our path doesnt exist
-            //therefore we should return an empty one;
-            if(path.size() != edge_count+1){path.clear();}
-
-            return path;
-        }
-
-
 };
     
-    
-string backward_gene(const string& read){
-    string result(read.size(),'\0');
-    for(int i = 0; i<read.size(); i++){
-        switch(read[i]){
-            case 'A': result[i] = 'T';break;
-            case 'T': result[i] = 'A';break;
-            case 'C': result[i] = 'G';break;
-            case 'G': result[i] = 'C';break;
-            default : result[i] = 'A';break;
-        }
-    }
-    return result;
-}
-    
+
+
+
     
 int main(){
     vector<string>entries;

@@ -6,43 +6,44 @@ A C++ genome assembler that reconstructs genomic sequences from short paired-end
 ## 🚀 Key Features
 
 ### - Read Preprocessing: 
-    - Cleans sequencing reads before graph construction to reduce sequencing errors and improve graph quality.
+
+- Cleans sequencing reads before graph construction to reduce sequencing errors and improve graph quality.
 
 ### - De Bruijn Graph Construction: 
 - Builds directed de Bruijn graphs from sequencing reads using k-mers.
 
 ### - Graph Simplification:
-    - Tip Removal: Prunes erroneous dead-end branches introduced by sequencing errors.
-    - Bubble Detection: Identifies and resolves local graph bubbles associated with sequencing errors or sequence variation.
+- Tip Removal: Prunes erroneous dead-end branches introduced by sequencing errors.
+- Bubble Detection: Identifies and resolves local graph bubbles associated with sequencing errors or sequence variation.
 
 ### - Repeat-Aware Multi-Mapping: 
-    - Allows graph nodes to map to multiple contigs using a std::vector of contig indices, preserving associations through repetitive regions.
+- Allows graph nodes to map to multiple contigs, preserving associations through repetitive regions.
 
 ### - Contig Stitching:
-    - Validates and connects compatible contig links while enforcing structural constraints to reduce the risk of misassemblies.
+- Validates and connects compatible contig links while enforcing structural constraints to reduce the risk of misassemblies.
 
 ### - Synthetic Dataset Generation:
-    - Includes a C++ test generator for generating sequencing reads for debugging and benchmarking.
+- Includes a C++ test generator for generating sequencing reads for debugging and benchmarking.
 
 ## 🧬 Assembly Pipeline
 
-    1. Read Cleaning: Preprocesses sequencing reads to reduce errors before graph construction.
-    2. Graph Construction: Builds a directed de Bruijn graph from the cleaned reads.
-    3. Graph Simplification: Removes erroneous tips and resolves bubbles to reduce graph complexity.
-    4. Repeat-Aware Traversal: Preserves multiple contig associations at repeat nodes to avoid unnecessary fragmentation.
-    5. Contig Stitching: Validates and connects compatible contig links to produce longer assembled sequences.
+1. Read Cleaning: Preprocesses sequencing reads to reduce errors before graph construction.
+2. Graph Construction: Builds a directed de Bruijn graph from the cleaned reads.
+3. Graph Simplification: Removes erroneous tips and resolves bubbles to reduce graph complexity.
+4. Repeat-Aware Traversal: Preserves multiple contig associations at repeat nodes to avoid unnecessary fragmentation.
+5. Contig Stitching: Validates and connects compatible contig links to produce longer assembled sequences.
 
 ## 📊 Benchmark Results
 
 Tested on bacterial reference genomes, including Escherichia coli and N. deltocephalinicola, under varying read-length and sequencing-error conditions.
 
-|Metric|	|Reported Result|
-|:---|  |:---|
-|E. coli NGA50|	|Approximately 133.6 kb|
-|Genome fraction|	|Approximately 99%|
-|Read lengths|	|100 bp|
-Simulated substitution error rate	|1%|
-|Simulated sequencing coverage| |30×|
+|Metric | Reported Result |
+| :--- | :--- |
+| E. coli NGA50	| Approximately 133.6 kb|
+| Genome fraction | Approximately 99%|
+| Read lengths | 100 bp |
+| Simulated substitution error rate	| 1% |
+| Simulated sequencing coverage | 30× |
 
 
 The assembler is designed to maintain assembly continuity while limiting structural errors across datasets with different read lengths and error profiles.
@@ -57,16 +58,16 @@ This assembler uses a multi-mapping index strategy:
 
 ### 1. Multiple Contig Associations: 
 
-    - Each graph node can store a std::vector of contig indices rather than a single index.
+- Each graph node can store a std::vector of contig indices rather than a single index.
 
 ### 2. Preserved Repeat Connections: 
 
-    - Nodes shared by multiple paths retain their associations instead of being automatically discarded.
+- Nodes shared by multiple paths retain their associations instead of being automatically discarded.
 
 ### 3. Constraint-Based Stitching: 
 
-    - Traversal and contig stitching use structural constraints to identify compatible connections through repetitive regions.
-    This strategy is intended to preserve graph connectivity and improve contig continuity, including in datasets containing sequencing errors.
+- Traversal and contig stitching use structural constraints to identify compatible connections through repetitive regions.
+This strategy is intended to preserve graph connectivity and improve contig continuity, including in datasets containing sequencing errors.
 
 ## 🧪 Synthetic Test Generator
 
@@ -88,10 +89,10 @@ The repository includes test_generator.cpp, a C++ utility for generating synthet
 
 ### Generated Files
 
-|File|	|Description|
-|:---|   |:---|
-|`genome_assembly/reference_gene.txt`|    |Ground-truth reference sequence used for evaluation|
-|`genome_assembly/test_inputs.txt`|   |Simulated sequencing reads supplied to the assembler|
+| File | Description |
+| --- | --- |
+| genome_assembly/reference_gene.txt | Ground-truth reference sequence used for evaluation |
+| genome_assembly/test_inputs.txt | Simulated sequencing reads supplied to the assembler |
 
 
 The reference sequence provides ground truth for evaluating the resulting assembly.
@@ -139,6 +140,7 @@ The project explores several core genome-assembly challenges:
 - Generating synthetic datasets for repeatable testing and evaluation.
 
 ## 📁 Project Structure
+<pre>
 .
 ├── genome_assembler.cpp
 ├── test_generator.cpp
@@ -146,8 +148,7 @@ The project explores several core genome-assembly challenges:
     ├── reference_gene.txt
     ├── test_inputs.txt
     └── contig_output.txt
-
-This tree illustrates the expected layout.
+</pre>
 
 ## 🎯 Project Goals
 
