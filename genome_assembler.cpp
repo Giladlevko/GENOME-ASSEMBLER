@@ -1,3 +1,20 @@
+/*
+*****************************************************************************************************************
+*****************************************************************************************************************
+* De Bruijn Graph Genome Assembler
+*
+* A genome assembler that constructs a de Bruijn graph from sequencing
+* reads, using read cleaning and graph simplification to reduce errors.
+*
+* Tip removal and bubble detection are used to identify and remove
+* structures associated with sequencing errors.
+*
+* For paired-end reads, contig linking uses the estimated distance
+* between read pairs to guide contig reconstruction.
+*****************************************************************************************************************
+*****************************************************************************************************************
+*/
+
 #include<vector>
 #include<string>
 #include<cstring>
@@ -18,10 +35,6 @@ using namespace std;
 
 
 
-
-//this uses concepts such as bubbles and tips to remove the errors!
-//Remove all tips and for each bubble only keep the path of the highest weight
-//meaning the path that uses the most agreed upon k-mers
 
 struct STRING_REF{
     STRING_REF(const string*s,int st,int len):str(s),start(st),length(len){}
@@ -52,25 +65,6 @@ ostream& operator<<(ostream&out,const STRING_REF& ref){
     }
     return out;
 }
-
-
-struct STRING_REF_HASHER{
-    //The murmur3 hash function
-    size_t operator()(const STRING_REF&ref)const{
-        size_t hash = 14695981039346656037ULL;
-        const char* ptr = ref.str->data() + ref.start;
-        for(int i = 0; i<ref.length; i++){
-            hash ^= static_cast<size_t>(ptr[i]);
-            hash *= 1099511628211ULL;
-        }
-        hash ^= hash>>33;
-        hash *= 0xff51afd7ed558ccdULL;
-        hash ^= hash>>33;
-        hash *= 0xc4ceb9fe1a85ec53ULL;
-        hash ^= hash>>33;
-        return hash;
-    }
-};
 
 
 
@@ -232,7 +226,6 @@ class K_MER_BIT_MAP{
 
         static const uint8_t big_k_mer = 50;
         static const uint8_t low_k_mer = 20;
-        static const uint8_t low_coverage = 15;
 
         size_t gene_vol = 0;
         size_t unique_gene = 0;
@@ -1246,14 +1239,14 @@ class GENOME_ASSEMBLER{
             const string contig_file_path = "genome_assembly/contig_output.txt";
             ofstream file(contig_file_path);
             build_contigs();
-            //can clear the debruijn graph to save memory!
-            //graph.clear();
+
+            if(is_read_pair){
+                CONTIG_LINKER linker(contigs,graph);
+                linker.join_linked_contigs();
+            }
+
             print_contigs(file);
             cout<<"\nGenome assembled!\ncontigs outputed at "<<contig_file_path<<endl;
-            //graph.print_graph_mem_size();
-            //graph.id_to_str.print_mem_size();
-
-            //print_peak_memory();
             
         }
 
@@ -1315,6 +1308,10 @@ class GENOME_ASSEMBLER{
             //linear contigs starting from a start node that 
             //has out > 0 and !(in == 1 && out == 1)
             const K_MER_BIT_MAP&id_to_str = graph.id_to_str;
+
+            
+            const int min_contig_len = 1;
+
             while(true){
                 vector<int> contig_path;
                 int v = -1,u_index = -1;
@@ -1348,7 +1345,7 @@ class GENOME_ASSEMBLER{
                     //*/
                     curr = next;
                 }
-                if(contig_path.size()>1){
+                if(contig_path.size()>min_contig_len){
                     contigs.push_back(CONTIG(contig_path));
                 }
                 
@@ -1377,7 +1374,7 @@ class GENOME_ASSEMBLER{
 
                         curr = next;
                     }
-                    if(contig_path.size() > 1){
+                    if(contig_path.size() > min_contig_len){
                         contigs.push_back(CONTIG(contig_path));
                     }
                 }
@@ -1387,16 +1384,9 @@ class GENOME_ASSEMBLER{
 
         void print_contigs(ostream&out){
             const K_MER_BIT_MAP&id_to_str = graph.id_to_str;
-            
-            if(is_read_pair){
-                joined_contigs.assign(contigs.size(),false);
-                //cout<<"there are "<<contigs.size()<<" contigs\n";
-                contig_link_matrix.resize(contigs.size(),vector<CONTIG_EDGE>(contigs.size()));
-                join_linked_contigs();
-            }
             size_t curr_contig = 1;
             for(int i = 0; i<contigs.size(); i++){
-                if(is_read_pair && joined_contigs[i]){continue;}
+                //if(is_read_pair && joined_contigs[i]){continue;}
                 if(contigs[i].nodes.empty()){continue;}
                 out<<">CONTIG"<<curr_contig++<<"\n";
                 id_to_str.print_str_at(contigs[i][0],out);
@@ -1410,7 +1400,7 @@ class GENOME_ASSEMBLER{
 
         class CONTIG_LINKER{
             public:
-                CONTIG_LINKER(vector<GENOME_ASSEMBLER::CONTIG>&cons,DE_BRUIJN_GRAPH& g,int k_size):
+                CONTIG_LINKER(vector<GENOME_ASSEMBLER::CONTIG>&cons,DE_BRUIJN_GRAPH& g):
                 contigs(cons),graph(g)
                 {
                     joined_contigs.assign(contigs.size(),false);
@@ -1420,6 +1410,8 @@ class GENOME_ASSEMBLER{
                 void join_linked_contigs(){
                     assign_node_to_contig_index();
                     build_contig_link_matrix();
+                    //node to contig is not needed anymore so I can clear it
+                    node_to_contig.clear(); node_to_contig.shrink_to_fit();
                     for(int i = 0; i<contig_link_matrix.size(); i++){
                         if(joined_contigs[i]){continue;}
                         int c = find_best_contig_match(i);
