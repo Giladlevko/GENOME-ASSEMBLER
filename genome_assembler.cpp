@@ -24,7 +24,6 @@
 #include<utility>
 #include<functional>
 #include<queue>
-#include<list>
 #include<cstdint>
 #include<iostream>
 
@@ -1384,11 +1383,12 @@ class GENOME_ASSEMBLER{
 
         void print_contigs(ostream&out){
             const K_MER_BIT_MAP&id_to_str = graph.id_to_str;
-            size_t curr_contig = 1;
+            size_t curr_contig = 0;
             for(int i = 0; i<contigs.size(); i++){
                 //if(is_read_pair && joined_contigs[i]){continue;}
+                curr_contig++;
                 if(contigs[i].nodes.empty()){continue;}
-                out<<">CONTIG"<<curr_contig++<<"\n";
+                out<<">CONTIG"<<curr_contig<<"\n";
                 id_to_str.print_str_at(contigs[i][0],out);
                 for(int j = 1; j<contigs[i].nodes.size(); j++){
                     id_to_str.print_back_char_at(contigs[i][j],out);
@@ -1574,7 +1574,7 @@ class GENOME_ASSEMBLER{
 
 
                 void join_contigs(int i,int j){
-                    //cout<<"joined contigs "<< i<<" and "<<j<<"\n";
+                    cout<<"joined contigs "<< i<<" and "<<j<<"\n";
                     joined_contigs[j] = true;
                     contigs[i].insert(contigs[j]);
                 }
