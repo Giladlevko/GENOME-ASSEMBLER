@@ -71,6 +71,9 @@ class GENOME_ASSEMBLER{
                 }
                 return nodes[i];
             }
+            size_t size(){
+                return (nodes.size());
+            }
         };
         vector<CONTIG>contigs;
 
@@ -208,19 +211,22 @@ class GENOME_ASSEMBLER{
                 }
 
                 void join_linked_contigs(){
-                    assign_node_to_contig_index();
-                    build_contig_link_matrix();
-                    //node to contig is not needed anymore so I can clear it
-                    node_to_contig.clear(); node_to_contig.shrink_to_fit();
-                    for(int i = 0; i<contig_link_matrix.size(); i++){
-                        if(joined_contigs[i]){continue;}
-                        int c = find_best_contig_match(i);
-                        if(c != -1){
-                            join_contigs(i,c);
+                    for(int i = 0; i<5; i++){
+                        assign_node_to_contig_index();
+                        build_contig_link_matrix();
+                        //node to contig is not needed anymore so I can clear it
+                        node_to_contig.clear(); node_to_contig.shrink_to_fit();
+                        for(int i = 0; i<contig_link_matrix.size(); i++){
+                            if(joined_contigs[i]){continue;}
+                            int c = find_best_contig_match(i);
+                            if(c != -1 && contig_link_is_mutual_best(i,c)){
+                                join_contigs(i,c);
+                            }
+                                
                         }
-                            
+                        clear_joined_contigs();
+                        MIN_WEIGHT += 20;
                     }
-                    clear_joined_contigs();
                     
                 }
             
@@ -246,8 +252,8 @@ class GENOME_ASSEMBLER{
 
                 vector<int>contig_link;
 
-                const int MIN_WEIGHT = 1;
-                const int MAX_VARIANCE = 50;
+                int MIN_WEIGHT = 1;
+                const int MAX_VARIANCE = 40;
 
                 void assign_node_to_contig_index(){
                     node_to_contig.assign(graph.size(),{});
@@ -371,6 +377,20 @@ class GENOME_ASSEMBLER{
                         }
                     }
                     return best_indx;
+                }
+
+
+                bool contig_link_is_mutual_best(int i, int j){
+                    int best_pre = -1;
+                    int best_weight = 0;
+                    for(int k = 0; k<contig_link_matrix.size(); k++){
+                        if(contig_link_matrix[k][j].weight>best_weight){
+                            best_weight = contig_link_matrix[k][j].weight;
+                            best_pre = k;
+                        }
+                    }
+                    //return ( contig_link_matrix[i][j].weight >= contig_link_matrix[best_pre][j].weight );
+                    return ( i == best_pre );
                 }
 
 
