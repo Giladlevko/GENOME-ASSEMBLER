@@ -199,7 +199,7 @@ class GENOME_ASSEMBLER{
             for(int i = 0; i<contigs.size(); i++){
                 //if(is_read_pair && joined_contigs[i]){continue;}
                 curr_contig++;
-                if(contigs[i].nodes.empty()){continue;}
+                if(contigs[i].nodes.empty() || contigs[i].size()<50){continue;}
                 out<<">CONTIG"<<curr_contig<<"\n";
                 id_to_str.print_str_at(contigs[i][0],out);
                 for(int j = 1; j<contigs[i].nodes.size(); j++){
@@ -227,9 +227,10 @@ class GENOME_ASSEMBLER{
                 }
 
                 void join_linked_contigs(){
-                    for(int i = 0; i<5; i++){
+                    for(int i = 0; i<3; i++){
+                        bool skip_reapeats = true;
                         assign_node_to_contig_index();
-                        build_contig_link_matrix();
+                        build_contig_link_matrix(skip_reapeats);
                         //node to contig is not needed anymore so I can clear it
                         node_to_contig.clear(); node_to_contig.shrink_to_fit();
                         for(int i = 0; i<contig_link_matrix.size(); i++){
@@ -241,8 +242,12 @@ class GENOME_ASSEMBLER{
                             }
                         
                         }
-                        MIN_WEIGHT += 5;
-                        //MAX_VARIANCE += 1;
+                        //MIN_WEIGHT += 5;
+                        //CONFIDENCE_MULT += 0.05;
+                        //if(MAX_VARIANCE > 5){
+                        //   MAX_VARIANCE -= 5; 
+                        //}
+                        
                         clear_joined_contigs();
                     }
                     
@@ -274,7 +279,8 @@ class GENOME_ASSEMBLER{
 
                 int MIN_WEIGHT = 3;
                 int MAX_VARIANCE = 30;
-                int MAX_GAP = 120;
+                int MAX_GAP = 300;
+                float CONFIDENCE_MULT = 1.3;
 
                 void assign_node_to_contig_index(){
                     node_to_contig.assign(graph.size(),{});
@@ -290,11 +296,11 @@ class GENOME_ASSEMBLER{
                 }
 
 
-                void build_contig_link_matrix(){
+                void build_contig_link_matrix(bool skip_reapeats){
                     cout<<"building links\n";
                     contig_link_matrix.assign(contigs.size(),vector<CONTIG_EDGE>(contigs.size()));
                     for(auto it:graph.id_to_str.pair_map){
-                        if(node_to_contig[it.first].size() > 1){continue;}
+                        if(node_to_contig[it.first].size() > 1 && skip_reapeats){continue;}
                         for(int i = 0; i<node_to_contig[it.first].size(); i++){
                             int contig_a_indx = node_to_contig[it.first][i].contig_index;
                             if(contig_a_indx>=0){
@@ -302,22 +308,26 @@ class GENOME_ASSEMBLER{
                                 int contig_a_size = contigs[contig_a_indx].nodes.size();
                                 int a_node_depth = node_to_contig[it.first][i].depth;
 
-                                int a_dist_from_end =  contig_a_size - a_node_depth; 
+                                int a_dist_from_end =  contig_a_size-1 - a_node_depth; 
 
                                 for(const auto& data:it.second){
-                                    if(node_to_contig[data.target_index].size() > 1){continue;}
+                                    if(node_to_contig[data.target_index].size() > 1 && skip_reapeats){continue;}
                                     for(int j = 0; j<node_to_contig[data.target_index].size(); j++){
                                         int contig_b_indx = node_to_contig[data.target_index][j].contig_index;
                                         if(contig_b_indx >= 0){
                                             int b_node_depth = node_to_contig[data.target_index][j].depth;
                                             int estimated_dist = data.dist;
-                                            int bases_dist = (a_dist_from_end + b_node_depth) + graph.true_k_len;
-                                            int gap = estimated_dist - bases_dist;
+                                            int bases_dist = (a_dist_from_end + b_node_depth);// + graph.true_k_len;
+                                            int gap = estimated_dist-bases_dist;
 
                                             //TO DO currently this only blocks large
                                             //gaps but should also block large overlaps
                                             //simply doing abs causes missasemblies for some reason
-                                            if(bases_dist < estimated_dist + MAX_VARIANCE){
+                                            bool is_valid = false;
+                                            if(gap >= 0){is_valid = gap < MAX_GAP*2;}
+                                            else{is_valid = abs(gap) < 20;}
+                                            //is_valid = abs(gap) < MAX_GAP*2;
+                                            if(is_valid){
                                                 contig_link_matrix[contig_a_indx][contig_b_indx].weight++;
                                                 contig_link_matrix[contig_a_indx][contig_b_indx].total_dist += gap;
                                             }
@@ -343,13 +353,18 @@ class GENOME_ASSEMBLER{
                     //cout<<"finding middle contig\n";
 
                     if(estimated_gap < MAX_GAP || search_depth > 3){return-1;}
-                    int min_middle_weight = min(1,MIN_WEIGHT/3);
+                    int min_middle_weight = min(1,MIN_WEIGHT/10);
                     int best_weight = min_middle_weight;
                     int best_indx = -1;
                     vector<int>valid_links;
                     for(int c_i:possible_contigs){
                         if(contig_link_matrix[c_i][target].weight > best_weight){
-                            if(contigs[c_i].nodes.size() + graph.true_k_len-1 < estimated_gap + MAX_VARIANCE){
+                            int span = contigs[c_i].nodes.size() + contig_link_matrix[c_i][target].dist();
+                            if(
+                                span > (estimated_gap - MAX_VARIANCE)
+                                && 
+                                span < (estimated_gap + MAX_VARIANCE)
+                            ){
                                 best_indx = c_i;
                                 best_weight = contig_link_matrix[c_i][target].weight;
                             }
@@ -408,6 +423,9 @@ class GENOME_ASSEMBLER{
                             second_weight = contig_link_matrix[i][j].weight;
                         }
                     }
+
+                    if( best_weight < second_weight * CONFIDENCE_MULT ){best_indx = -1;}
+
                     if(best_indx != -1){
                         if(contig_link_matrix[i][best_indx].dist() > MAX_GAP){
                             int middle_contig = find_intermediate_contig(best_indx,valid_links,best_dist);
@@ -416,7 +434,7 @@ class GENOME_ASSEMBLER{
                                 cout<<"middle gap "<<middle_gap<<"\n";
                                 join_contigs(i,middle_contig,middle_gap);
                                 cout<<"gap changed from "<<best_dist;
-                                best_dist -= contigs[middle_contig].size();// + graph.true_k_len - 1;
+                                best_dist -= contigs[middle_contig].size(); + middle_gap;// + graph.true_k_len - 1;
                                 cout<<" to "<<best_dist<<"\n";
                             }
                             else{
@@ -425,7 +443,7 @@ class GENOME_ASSEMBLER{
                             }
                         }
                     }
-                    //if(best_weight < second_weight * 1.8){best_indx = -1;}
+                    
                     gap = best_dist;
                     return best_indx;
                 }
@@ -451,10 +469,11 @@ class GENOME_ASSEMBLER{
                     return ( 
                         contig_link_matrix[i][j].weight >= contig_link_matrix[best_pre][j].weight
                         &&
-                        best_weight > second_weight * 1.5 
+                        best_weight > second_weight * 1.3 
                     );
-                    */
+                    //*/
                     //return ( contig_link_matrix[i][j].weight >= contig_link_matrix[best_pre][j].weight*0.9 );
+                    // && best_weight > second_weight * (CONFIDENCE_MULT-0.5)
                     return ( i == best_pre );
                 }
 
