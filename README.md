@@ -49,6 +49,7 @@ Tested on bacterial reference genomes, including Escherichia coli and N. deltoce
 | Read lengths | 100 bp |
 | Simulated substitution error rate	| 1% |
 | Simulated sequencing coverage | 30× |
+| Peak memory usage | <700 MB |
 
 
 The assembler is designed to maintain assembly continuity while limiting structural errors across datasets with different read lengths and error profiles.
