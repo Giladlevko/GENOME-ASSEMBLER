@@ -3,20 +3,37 @@
 #include<vector>
 #include<string>
 #include<cstdint>
+#include<fstream>
 #include<iostream>              //For std::cin, std::cout
 
 
 
-int main(){
+int main(int argc, char* argv[]){
+    string contig_out_path = "genome_assembly/contig_output.txt";
+    string test_input_path = "genome_assembly/test_inputs.txt";
+    if(argc < 3){
+        cout<<"Not enough files inputed!\n" 
+        <<"Usage: ./main <input_file> <output_file>\n"
+        <<"Using default files!\n"
+        <<"Input: genome_assembly/test_inputs.txt\n"
+        <<"Contig output: genome_assembly/contig_output.txt\n";
+    }
+    else{
+        test_input_path = argv[1];
+        contig_out_path = argv[2];
+    }
+
     vector<string>entries;
     string entry;
     vector<uint16_t>distances;
     bool is_read_pair = false;
 
+    ifstream in_file(test_input_path);
+
     int count;
-    cin>>count;
+    in_file>>count;
     for(int i = 0; i<count; i++){
-        cin>>entry;
+        in_file>>entry;
         int pos_1 = entry.find('|');
         if(pos_1 == string::npos){
             entries.push_back(entry);
@@ -32,7 +49,7 @@ int main(){
             distances.push_back(d);
         }
     }
-    GENOME_ASSEMBLER assembler(entries,distances,is_read_pair);
+    GENOME_ASSEMBLER assembler(entries,distances,is_read_pair,contig_out_path);
     assembler.assemble_genome();
         
 }

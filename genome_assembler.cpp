@@ -1217,8 +1217,8 @@ class DE_BRUIJN_GRAPH{
     
 class GENOME_ASSEMBLER{
     public:
-        GENOME_ASSEMBLER(vector<string>&r,vector<uint16_t>&dist,bool is_pair)
-        :reads(r),distances(dist),is_read_pair(is_pair){
+        GENOME_ASSEMBLER(vector<string>&r,vector<uint16_t>&dist,bool is_pair,string& contig_file)
+        :reads(r),distances(dist),is_read_pair(is_pair),contig_file_path(contig_file){
         
             graph = DE_BRUIJN_GRAPH(reads,distances,is_read_pair);
 
@@ -1228,14 +1228,14 @@ class GENOME_ASSEMBLER{
             if(is_pair){
                 graph.build_pair_link_map(reads,dist);
             }
-            //can remove the reads as I don't need them anymore
+            //can remove the reads since they are not needed anymore
             reads.clear(); reads.shrink_to_fit();
             dist.clear(); dist.shrink_to_fit();
         }
         
         void assemble_genome(){
             graph.update_edge_degree();
-            const string contig_file_path = "genome_assembly/contig_output.txt";
+            
             ofstream file(contig_file_path);
             build_contigs();
 
@@ -1245,7 +1245,7 @@ class GENOME_ASSEMBLER{
             }
 
             print_contigs(file);
-            cout<<"\nGenome assembled!\ncontigs outputed at "<<contig_file_path<<endl;
+            cout<<"\nGenome assembled!\ncontigs outputed at "<<contig_file_path<<"\a"<<endl;
             
         }
 
@@ -1253,7 +1253,7 @@ class GENOME_ASSEMBLER{
     private:
         
         DE_BRUIJN_GRAPH graph;
-
+        string contig_file_path = "genome_assembly/contig_output.txt";
         bool is_read_pair;
         vector<uint16_t>&distances;
         vector<string>&reads;
@@ -1262,14 +1262,26 @@ class GENOME_ASSEMBLER{
         struct CONTIG{
             CONTIG(vector<int>a):nodes(a){}
             vector<int>nodes;
-            void insert(const CONTIG&other){
-                nodes.insert(nodes.end(),other.nodes.begin(),other.nodes.end());
+            void insert(const CONTIG&other,int gap){
+                //cout<<"gap is "<<gap<<" main size = "<<size()<<" other size = "<<other.size()<<"\n";
+                if(gap <= 0){
+                    nodes.insert(nodes.end(),other.nodes.begin()+abs(gap),other.nodes.end());
+                }
+                else{
+                    vector<int>n_bases(gap,-1);
+                    nodes.insert(nodes.end(),n_bases.begin(),n_bases.end());
+                    nodes.insert(nodes.end(),other.nodes.begin(),other.nodes.end());
+                }
+               
             }
             int& operator[](int i){
                 if(i > nodes.size()){
                     throw std::out_of_range("contig base index out of range");
                 }
                 return nodes[i];
+            }
+            size_t size()const{
+                return (nodes.size());
             }
         };
         vector<CONTIG>contigs;
@@ -1308,8 +1320,7 @@ class GENOME_ASSEMBLER{
             //has out > 0 and !(in == 1 && out == 1)
             const K_MER_BIT_MAP&id_to_str = graph.id_to_str;
 
-            
-            const int min_contig_len = 1;
+            const int min_contig_len = 0;
 
             while(true){
                 vector<int> contig_path;
@@ -1383,15 +1394,19 @@ class GENOME_ASSEMBLER{
 
         void print_contigs(ostream&out){
             const K_MER_BIT_MAP&id_to_str = graph.id_to_str;
-            size_t curr_contig = 0;
+            size_t curr_contig = 1;
             for(int i = 0; i<contigs.size(); i++){
-                //if(is_read_pair && joined_contigs[i]){continue;}
-                curr_contig++;
-                if(contigs[i].nodes.empty()){continue;}
-                out<<">CONTIG"<<curr_contig<<"\n";
+                if(contigs[i].nodes.empty() || contigs[i].size()<100){continue;}
+                out<<">CONTIG"<<curr_contig++<<"\n";
                 id_to_str.print_str_at(contigs[i][0],out);
                 for(int j = 1; j<contigs[i].nodes.size(); j++){
-                    id_to_str.print_back_char_at(contigs[i][j],out);
+                    if(contigs[i][j] == -1){
+                        out<<"N";
+                    }
+                    else{
+                        id_to_str.print_back_char_at(contigs[i][j],out);
+                    }
+                    
                 }
                 out<<"\n";
             }
@@ -1404,23 +1419,30 @@ class GENOME_ASSEMBLER{
                 contigs(cons),graph(g)
                 {
                     joined_contigs.assign(contigs.size(),false);
-                    contig_link_matrix.resize(contigs.size(),vector<CONTIG_EDGE>(contigs.size()));
+                    
                 }
 
                 void join_linked_contigs(){
-                    assign_node_to_contig_index();
-                    build_contig_link_matrix();
-                    //node to contig is not needed anymore so I can clear it
-                    node_to_contig.clear(); node_to_contig.shrink_to_fit();
-                    for(int i = 0; i<contig_link_matrix.size(); i++){
-                        if(joined_contigs[i]){continue;}
-                        int c = find_best_contig_match(i);
-                        if(c != -1){
-                            join_contigs(i,c);
-                        }
+                    for(int i = 0; i<3; i++){
+                        bool skip_reapeats = true;
+                        assign_node_to_contig_index();
+                        build_contig_link_matrix(skip_reapeats);
+                        //node to contig is not needed anymore so it can be cleared
+                        node_to_contig.clear(); node_to_contig.shrink_to_fit();
+                        for(int i = 0; i<contig_link_matrix.size(); i++){
+                            if(joined_contigs[i]){continue;}
+                            int estimated_gap = 0;
+                            int c = find_best_contig_match(i,estimated_gap);
+                            if(c != -1 && contig_link_is_mutual_best(i,c)){
+                                join_contigs(i,c,estimated_gap);
+                            }
                         
+                        }
+                        clear_joined_contigs();
                     }
-                    clear_joined_contigs();
+                    
+                    //cout<<"finished linking\n";
+                    
                 }
             
             private:
@@ -1445,24 +1467,30 @@ class GENOME_ASSEMBLER{
 
                 vector<int>contig_link;
 
-                const int MIN_WEIGHT = 1;
-                const int MAX_VARIANCE = 50;
+                int MIN_WEIGHT = 3;
+                int MAX_VARIANCE = 30;
+                int MAX_GAP = 300;
+                float CONFIDENCE_MULT = 1.3;
 
                 void assign_node_to_contig_index(){
                     node_to_contig.assign(graph.size(),{});
                     for(int i = 0; i<contigs.size(); i++){
                         for(int j = 0; j<contigs[i].nodes.size(); j++){
                             int v = contigs[i].nodes[j];
-                            node_to_contig[v].push_back({i,j});
+                            if(v != -1){
+                                node_to_contig[v].push_back({i,j});
+                            }
+                            
                         }
                     }
                 }
 
 
-                void build_contig_link_matrix(){
+                void build_contig_link_matrix(bool skip_reapeats){
                     //cout<<"building links\n";
-                    
+                    contig_link_matrix.assign(contigs.size(),vector<CONTIG_EDGE>(contigs.size()));
                     for(auto it:graph.id_to_str.pair_map){
+                        if(node_to_contig[it.first].size() > 1 && skip_reapeats){continue;}
                         for(int i = 0; i<node_to_contig[it.first].size(); i++){
                             int contig_a_indx = node_to_contig[it.first][i].contig_index;
                             if(contig_a_indx>=0){
@@ -1470,18 +1498,23 @@ class GENOME_ASSEMBLER{
                                 int contig_a_size = contigs[contig_a_indx].nodes.size();
                                 int a_node_depth = node_to_contig[it.first][i].depth;
 
-                                int a_dist_from_end =  contig_a_size - a_node_depth; 
+                                int a_dist_from_end =  contig_a_size-1 - a_node_depth; 
 
                                 for(const auto& data:it.second){
+                                    if(node_to_contig[data.target_index].size() > 1 && skip_reapeats){continue;}
                                     for(int j = 0; j<node_to_contig[data.target_index].size(); j++){
                                         int contig_b_indx = node_to_contig[data.target_index][j].contig_index;
                                         if(contig_b_indx >= 0){
                                             int b_node_depth = node_to_contig[data.target_index][j].depth;
                                             int estimated_dist = data.dist;
-                                            int bases_dist = (a_dist_from_end + b_node_depth) + graph.true_k_len;
-                                            int gap = estimated_dist - bases_dist;
+                                            int bases_dist = (a_dist_from_end + b_node_depth);
+                                            int gap = estimated_dist-bases_dist;
 
-                                            if(bases_dist < estimated_dist + MAX_VARIANCE){
+                                            bool is_valid = false;
+                                            if(gap >= 0){is_valid = gap < MAX_GAP*2;}
+                                            else{is_valid = abs(gap) < 20;}
+
+                                            if(is_valid){
                                                 contig_link_matrix[contig_a_indx][contig_b_indx].weight++;
                                                 contig_link_matrix[contig_a_indx][contig_b_indx].total_dist += gap;
                                             }
@@ -1500,18 +1533,25 @@ class GENOME_ASSEMBLER{
                 int find_intermediate_contig(
                     int target,
                     const vector<int>&possible_contigs,
-                    int estimated_gap
+                    int estimated_gap,
+                    int search_depth = 0
                 ){
 
                     //cout<<"finding middle contig\n";
 
-                    if(estimated_gap < graph.true_k_len){return-1;}
-                    int best_weight = MIN_WEIGHT;
+                    if(estimated_gap < MAX_GAP || search_depth > 3){return-1;}
+                    int min_middle_weight = 1;
+                    int best_weight = min_middle_weight;
                     int best_indx = -1;
                     vector<int>valid_links;
                     for(int c_i:possible_contigs){
                         if(contig_link_matrix[c_i][target].weight > best_weight){
-                            if(contigs[c_i].nodes.size() * graph.true_k_len < estimated_gap + MAX_VARIANCE){
+                            int span = contigs[c_i].nodes.size() + contig_link_matrix[c_i][target].dist();
+                            if(
+                                span > (estimated_gap - MAX_VARIANCE)
+                                && 
+                                span < (estimated_gap + MAX_VARIANCE)
+                            ){
                                 best_indx = c_i;
                                 best_weight = contig_link_matrix[c_i][target].weight;
                             }
@@ -1519,19 +1559,23 @@ class GENOME_ASSEMBLER{
                     }
                     if(best_indx != -1){
                         int gap = contig_link_matrix[best_indx][target].dist();
-                        if(gap > graph.true_k_len){
+                        if(gap > MAX_GAP){
                             for(int j = 0; j<contig_link_matrix[best_indx].size(); j++){
                                 if(
-                                    contig_link_matrix[best_indx][j].weight >= MIN_WEIGHT
+                                    contig_link_matrix[best_indx][j].weight >= min_middle_weight
                                     &&
-                                    contig_link_matrix[best_indx][j].dist() < graph.true_k_len
+                                    contig_link_matrix[best_indx][j].dist() < MAX_GAP
                                 ){
                                     valid_links.push_back(j);
                                 }
                             }
-                            int intermediate = find_intermediate_contig(target,valid_links,gap);
+                            int intermediate = find_intermediate_contig(target,valid_links,gap,++search_depth);
                             if(intermediate != -1){
-                                join_contigs(best_indx,intermediate);
+                                int intermediate_gap = contig_link_matrix[best_indx][intermediate].dist();
+                                join_contigs(best_indx,intermediate,intermediate_gap);
+                            }
+                            else{
+                                best_indx = -1;
                             }
                         }
                     }
@@ -1541,42 +1585,75 @@ class GENOME_ASSEMBLER{
 
 
 
-                int find_best_contig_match(int i){
+                int find_best_contig_match(int i,int& gap){
                     //cout<<"finding contig match\n";
                     int best_indx = -1;
                     int best_weight = MIN_WEIGHT;
+                    int second_weight = 0;
                     int best_dist = 0;
                     vector<int>valid_links;
                     for(int j = 0; j<contig_link_matrix[i].size(); j++){
                         if(
                             contig_link_matrix[i][j].weight >= MIN_WEIGHT
                             &&
-                            contig_link_matrix[i][j].dist() < graph.true_k_len
+                            contig_link_matrix[i][j].dist() < MAX_GAP
                         ){
                             valid_links.push_back(j);
                         }
                         if(contig_link_matrix[i][j].weight > best_weight){
                             best_indx = j;
+                            second_weight = best_weight;
                             best_weight = contig_link_matrix[i][j].weight;
                             best_dist = contig_link_matrix[i][j].dist();
                         }
+                        else if(second_weight < contig_link_matrix[i][j].weight){
+                            second_weight = contig_link_matrix[i][j].weight;
+                        }
                     }
+
+                    if( best_weight < second_weight * CONFIDENCE_MULT ){best_indx = -1;}
+
                     if(best_indx != -1){
-                        if(contig_link_matrix[i][best_indx].dist() > graph.true_k_len){
+                        if(contig_link_matrix[i][best_indx].dist() > MAX_GAP){
                             int middle_contig = find_intermediate_contig(best_indx,valid_links,best_dist);
                             if(middle_contig != -1){
-                                join_contigs(i,middle_contig);
+                                int middle_gap = contig_link_matrix[i][middle_contig].dist();
+                                //cout<<"middle gap "<<middle_gap<<"\n";
+                                join_contigs(i,middle_contig,middle_gap);
+                                //cout<<"gap changed from "<<best_dist;
+                                best_dist -= contigs[middle_contig].size(); + middle_gap;
+                                //cout<<" to "<<best_dist<<"\n";
+                            }
+                            else{
+                                best_indx = -1;
+                                
                             }
                         }
                     }
+                    
+                    gap = best_dist;
                     return best_indx;
                 }
 
+                bool contig_link_is_mutual_best(int i, int j){
+                    int best_pre = -1;
+                    int best_weight = 0;
+                    for(int k = 0; k<contig_link_matrix.size(); k++){
+                        if(contig_link_matrix[k][j].weight>best_weight){
+                            best_weight = contig_link_matrix[k][j].weight;
+                            best_pre = k;
+                        }
+                    }
+                    return ( i == best_pre );
+                }
 
-                void join_contigs(int i,int j){
-                    cout<<"joined contigs "<< i<<" and "<<j<<"\n";
+
+                void join_contigs(int i,int j,int gap = 0){
+                    //cout<<"joined contigs "<< i<<" and "<<j<<"\n";
+                    if(gap<0 && abs(gap)>= contigs[j].size()-1){return;}
+                    //cout<<"gap is "<<gap<<"\n";
                     joined_contigs[j] = true;
-                    contigs[i].insert(contigs[j]);
+                    contigs[i].insert(contigs[j],gap);
                 }
 
                 void clear_joined_contigs(){
@@ -1591,21 +1668,37 @@ class GENOME_ASSEMBLER{
         };
 
 };
+
+
+
+
     
+int main(int argc, char* argv[]){
+    string contig_out_path = "genome_assembly/contig_output.txt";
+    string test_input_path = "genome_assembly/test_inputs.txt";
+    if(argc < 3){
+        cout<<"Not enough files inputed!\n" 
+        <<"Usage: ./main <input_file> <output_file>\n"
+        <<"Using default files!\n"
+        <<"Input: genome_assembly/test_inputs.txt\n"
+        <<"Contig output: genome_assembly/contig_output.txt\n";
+    }
+    else{
+        test_input_path = argv[1];
+        contig_out_path = argv[2];
+    }
 
-
-
-    
-int main(){
     vector<string>entries;
     string entry;
     vector<uint16_t>distances;
     bool is_read_pair = false;
 
+    ifstream in_file(test_input_path);
+
     int count;
-    cin>>count;
+    in_file>>count;
     for(int i = 0; i<count; i++){
-        cin>>entry;
+        in_file>>entry;
         int pos_1 = entry.find('|');
         if(pos_1 == string::npos){
             entries.push_back(entry);
@@ -1621,7 +1714,7 @@ int main(){
             distances.push_back(d);
         }
     }
-    GENOME_ASSEMBLER assembler(entries,distances,is_read_pair);
+    GENOME_ASSEMBLER assembler(entries,distances,is_read_pair,contig_out_path);
     assembler.assemble_genome();
         
 }

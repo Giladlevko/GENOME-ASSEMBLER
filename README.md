@@ -10,19 +10,20 @@ A C++ genome assembler that reconstructs genomic sequences from short paired-end
 - Cleans sequencing reads before graph construction to reduce sequencing errors and improve graph quality.
 
 ### - De Bruijn Graph Construction: 
+
 - Builds directed de Bruijn graphs from sequencing reads using k-mers.
 
 ### - Graph Simplification:
+
 - Tip Removal: Prunes erroneous dead-end branches introduced by sequencing errors.
 - Bubble Detection: Identifies and resolves local graph bubbles associated with sequencing errors or sequence variation.
 
-### - Repeat-Aware Multi-Mapping: 
-- Allows graph nodes to map to multiple contigs, preserving associations through repetitive regions.
-
 ### - Contig Stitching:
+
 - Validates and connects compatible contig links while enforcing structural constraints to reduce the risk of misassemblies.
 
 ### - Synthetic Dataset Generation:
+
 - Includes a C++ test generator for generating sequencing reads for debugging and benchmarking.
 
 ## 🧬 Assembly Pipeline
@@ -39,8 +40,12 @@ Tested on bacterial reference genomes, including Escherichia coli and N. deltoce
 
 |Metric | Reported Result |
 | :--- | :--- |
-| E. coli NGA50	| Approximately 133.6 kb|
-| Genome fraction | Approximately 99%|
+| E. coli NGA50	| Approximately 178.2 kb |
+| Largest alignment | Approximately 486.9 kb (>10% of the genome) |
+| Genome fraction | Approximately 98.5% |
+| Duplication rate | 1.0 |
+| Missasemblies | 0 |
+| Local missasemblies | 0 |
 | Read lengths | 100 bp |
 | Simulated substitution error rate	| 1% |
 | Simulated sequencing coverage | 30× |
@@ -51,41 +56,37 @@ Benchmark values depend on the reference genome, dataset, and evaluation methodo
 
 ## 🔍 Technical Highlight: Repeat-Aware Graph Traversal
 
-Repetitive genomic sequences are a major challenge for de Bruijn graph assemblers. A graph node may represent a sequence that occurs in multiple genomic locations, making it difficult to determine which path a traversal should follow.
-A strict one-to-one node-to-contig mapping can discard ambiguous repeat nodes or prevent paths from being connected, potentially fragmenting an otherwise contiguous assembly.
+Repeated sequences can make genome assembly difficult because the same graph node or link may correspond to multiple locations in the genome. Following an ambiguous path can lead to incorrect contig joins.
 
-This assembler uses a multi-mapping index strategy:
+Rather than forcing connections through repeats, the assembler uses link-selection rules to identify reliable connections and leaves unresolved repeat boundaries unjoined.
 
-### 1. Multiple Contig Associations: 
+### 1. Reciprocal Link Validation
 
-- Each graph node can store a std::vector of contig indices rather than a single index.
+- Requires mutual agreement between connected nodes: Node A must select Node B as its preferred continuation, and Node B must select Node A in return.
+- Rejects one-sided connections that do not satisfy this requirement.
 
-### 2. Preserved Repeat Connections: 
+### 2. Directional Link Selection
 
-- Nodes shared by multiple paths retain their associations instead of being automatically discarded.
+- **Forward pass:** Selects links using a competitive ratio. The best candidate must have a weight greater than 1.3 times that of the second best candidate.
+- **Backward pass:** Checks whether the selected edge is also the best edge in the opposite direction.
 
-### 3. Constraint-Based Stitching: 
+### 3. Filtering Invalid Edges
 
-- Traversal and contig stitching use structural constraints to identify compatible connections through repetitive regions.
-This strategy is intended to preserve graph connectivity and improve contig continuity, including in datasets containing sequencing errors.
+- Removes toxic overlaps and excessively wide negative gap connections during matrix construction, preventing these links from being considered during contig stitching.
+
+These rules allow reliable connections to be chained together while leaving ambiguous repeat regions unresolved.
+
+On the evaluated *E. coli* assembly, the assembler achieved **zero detected misassemblies**, according to QUAST.
 
 ## 🧪 Synthetic Test Generator
 
 The repository includes test_generator.cpp, a C++ utility for generating synthetic sequencing datasets for debugging, validation, and benchmarking.
 
-### Generator Capabilities
+### Configuring the Generator
 
-- Genome source: Loads reference sequences from N. deltocephalinicola or E. coli, or generates random genomes with a target GC content of 50%.
+The generator's simulation parameters are defined in `test_generator.cpp`. To customize a dataset, modify the relevant values in the source file and recompile the generator before running it.
 
-- Read simulation: Targets a read length of 100 bp, with lengths varying between 50 and 150 bp.
-
-- Coverage: Targets 30× sequencing coverage.
-
-- Error injection: Introduces random nucleotide substitutions at a target rate of 1%.
-
-- Paired-end reads: Generates read pairs using insert distances between 100 and 300 bp.
-
-- Input formatting: Writes paired-end reads using | delimiters and includes fragment-length information.
+The default configuration targets 30× coverage, 50-150 bp reads, a 1% substitution error rate, and paired-end insert distances between 100 and 300 bp.
 
 ### Generated Files
 
@@ -118,13 +119,13 @@ This generates the reference genome and simulated sequencing reads in the genome
 ### 2. Compile the Assembler
 
 ```bash
-g++ genome_assembler.cpp -o genome_assembler
+g++ main.cpp -o main
 ```
 
 ### 3. Run the Assembler
 
 ```bash
-./genome_assembler genome_assembly/test_inputs.txt genome_assembly/contig_output.txt
+./main genome_assembly/test_inputs.txt genome_assembly/contig_output.txt
 ```
 
 The assembler reads the input data and writes the resulting contigs to genome_assembly/contig_output.txt.
@@ -142,12 +143,18 @@ The project explores several core genome-assembly challenges:
 ## 📁 Project Structure
 <pre>
 .
-├── genome_assembler.cpp
+├── main.cpp
 ├── test_generator.cpp
+├── source/
+    ├── common.hpp
+    ├── de_bruijn_graph.hpp
+    ├── genome_assembler.hpp
+    └── kmer_bit_map.hpp
 └── genome_assembly/
     ├── reference_gene.txt
     ├── test_inputs.txt
     └── contig_output.txt
+
 </pre>
 
 ## 🎯 Project Goals
