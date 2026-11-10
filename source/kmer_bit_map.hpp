@@ -210,8 +210,6 @@ class K_MER_BIT_MAP{
             unordered_set<int> empty_set;
             build_pair_link_map(reads,dist,empty_set,20,false);
 
-            //to save memory I can clear the dist
-            //dist.clear(); dist.shrink_to_fit();
         }
 
 

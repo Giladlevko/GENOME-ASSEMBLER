@@ -38,7 +38,7 @@ A C++ genome assembler that reconstructs genomic sequences from short paired-end
 
 Tested on bacterial reference genomes, including Escherichia coli and N. deltocephalinicola, under varying read-length and sequencing-error conditions.
 
-|Metric | Reported Result |
+|Metric | Reported Result on E-coli assembly |
 | :--- | :--- |
 | E. coli NGA50	| Approximately 178.2 kb |
 | Largest alignment | Approximately 486.9 kb (>10% of the genome) |

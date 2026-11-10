@@ -1,0 +1,93 @@
+/mnt/c/Users/gilad/QUAST/quast-5.3.0/quast.py -m 50 -r /mnt/c/Users/gilad/PROGRAMMING_PROJECTS/GENOME_ASSEMBLER/genome_assembly/reference_gene.txt /mnt/c/Users/gilad/PROGRAMMING_PROJECTS/GENOME_ASSEMBLER/genome_assembly/contig_output.txt
+
+Version: 5.3.0, c3eb988a
+
+System information:
+  OS: Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43 (linux_64)
+  Python version: 3.14.4
+  CPUs number: 8
+
+Started: 2026-11-09 21:25:05
+
+Logging to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/quast.log
+NOTICE: Maximum number of threads is set to 2 (use --threads option to set it manually)
+
+CWD: /mnt/c/Users/gilad/QUAST/quast-5.3.0
+Main parameters: 
+  MODE: default, threads: 2, min contig length: 50, min alignment length: 65, min alignment IDY: 95.0, \
+  ambiguity: one, min local misassembly length: 200, min extensive misassembly length: 1000
+
+WARNING: Can't draw plots: python-matplotlib is missing or corrupted.
+
+Reference:
+  /mnt/c/Users/gilad/PROGRAMMING_PROJECTS/GENOME_ASSEMBLER/genome_assembly/reference_gene.txt ==> reference_gene
+
+Contigs:
+  Pre-processing...
+  /mnt/c/Users/gilad/PROGRAMMING_PROJECTS/GENOME_ASSEMBLER/genome_assembly/contig_output.txt ==> contig_output.txt
+
+2026-11-09 21:25:07
+Running Basic statistics processor...
+  Reference genome:
+    reference_gene.txt, length = 4641652, num fragments = 1, GC % = 50.79
+  Contig files: 
+    contig_output.txt
+  Calculating N50 and L50...
+    contig_output.txt, N50 = 178231, L50 = 9, auN = 200116.6, Total length = 4586414, GC % = 50.74, # N's per 100 kbp =  346.20
+Done.
+
+2026-11-09 21:25:13
+Running Contig analyzer...
+  contig_output.txt
+  Logging to files /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/contigs_reports/contigs_report_contig_output-txt.stdout and contigs_report_contig_output-txt.stderr...
+  Aligning contigs to the reference
+  quast_libs/minimap2/minimap2 -c -x asm10 -B5 -O4,16 --no-long-join -r 200 -N 50 \
+  -s 65 -z 200 --mask-level 0.9 --min-occ 200 -g 2500 --score-N 2 --cs -t 2 quast_results/results_2026_11_09_21_25_05/quast_corrected_input/reference_gene.txt \
+  quast_results/results_2026_11_09_21_25_05/quast_corrected_input/contig_output-txt \
+  > quast_results/results_2026_11_09_21_25_05/contigs_reports/minimap_output/contig_output-txt.coords_tmp \
+  2>> quast_results/results_2026_11_09_21_25_05/contigs_reports/contigs_report_contig_output-txt.stderr
+  Analysis is finished.
+
+  Creating total report...
+    saved to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/contigs_reports/misassemblies_report.txt, misassemblies_report.tsv, and misassemblies_report.tex
+  Transposed version of total report...
+    saved to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/contigs_reports/transposed_report_misassemblies.txt, transposed_report_misassemblies.tsv, and transposed_report_misassemblies.tex
+  Creating total report...
+    saved to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/contigs_reports/unaligned_report.txt, unaligned_report.tsv, and unaligned_report.tex
+Done.
+
+2026-11-09 21:25:16
+Running NA-NGA calculation...
+  contig_output.txt, Largest alignment = 486855, NA50 = 178231, NGA50 = 178231, LA50 = 9, LGA50 = 9
+Done.
+
+2026-11-09 21:25:18
+Running Genome analyzer...
+  NOTICE: No file with genomic features were provided. Use the --features option if you want to specify it.
+
+  NOTICE: No file with operons were provided. Use the -O option if you want to specify it.
+  contig_output.txt
+  Analysis is finished.
+Done.
+
+NOTICE: Genes are not predicted by default. Use --gene-finding or --glimmer option to enable it.
+
+2026-11-09 21:25:19
+Creating large visual summaries...
+This may take a while: press Ctrl-C to skip this step..
+  1 of 1: Creating Icarus viewers...
+Done
+
+2026-11-09 21:25:20
+RESULTS:
+  Text versions of total report are saved to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/report.txt, report.tsv, and report.tex
+  Text versions of transposed total report are saved to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/transposed_report.txt, transposed_report.tsv, and transposed_report.tex
+  HTML version (interactive tables and plots) is saved to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/report.html
+  Icarus (contig browser) is saved to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/icarus.html
+  Log is saved to /mnt/c/Users/gilad/QUAST/quast-5.3.0/quast_results/results_2026_11_09_21_25_05/quast.log
+
+Finished: 2026-11-09 21:25:22
+Elapsed time: 0:00:16.689113
+NOTICEs: 4; WARNINGs: 2; non-fatal ERRORs: 0
+
+Thank you for using QUAST!

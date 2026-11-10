@@ -1,0 +1,14 @@
+reference chromosomes:
+	REFERENCE (total length: 4641652 bp, total length without N's: 4641652 bp, maximal covered length: 4570098 bp)
+
+total genome size: 4641652
+
+gap min size: 50
+partial gene/operon min size: 100
+
+
+
+assembly                 | genome    | duplication | gaps      | genes     | partial   | operons   | partial   |
+                         | fraction  | ratio       | number    |           | genes     |           | operons   |
+========================================================================================================================
+contig_output-txt        | 98.458    | 1.000       | 104       | -         | -         | -         | -         |
